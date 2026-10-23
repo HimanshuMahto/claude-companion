@@ -1,0 +1,104 @@
+# Claude Companion
+
+A menu bar companion for Claude Code. A little ghost in your menu bar shows what Claude
+is up to: white with no sessions, blue when connected, a bouncing purple while working,
+orange with a badge when it needs your approval, and green when a task finishes. When a session needs permission, a popup appears in the corner with
+**Allow**, **Deny** or **Go to terminal**, so you can answer without hunting for the tab.
+
+Built with Tauri v2, so it can run on macOS, Windows and Linux. macOS is the first-class
+target for now (see [Platform status](#platform-status)).
+
+## How it works
+
+```
+Claude Code ──hook──▶ ~/.claude-companion/hook.sh ──POST──▶ 127.0.0.1:47823 (app)
+            ◀─stdout── decision JSON (or nothing) ◀──────── popup answer
+```
+
+- The app registers a hook script for `SessionStart`, `UserPromptSubmit`, `PreToolUse`,
+  `PostToolUse`, `PermissionRequest`, `Notification`, `Stop` and `SessionEnd`.
+- Running sessions are discovered from `~/.claude/sessions/<pid>.json`, which Claude Code
+  keeps updated with each session's status. This finds sessions started before the app, in any
+  terminal or IDE. Hook events update status faster, and together they drive the tray ghost
+  (white, blue, purple, orange, green).
+- A `PermissionRequest` holds the hook open until you answer:
+  - **Allow** / **Deny**: returns `hookSpecificOutput.decision` to Claude Code.
+    Deny also interrupts Claude, like answering "No" in the terminal.
+  - **Go to terminal**: returns no decision, so Claude Code shows its usual prompt,
+    and the app brings that tab to the front.
+  - If you don't answer within 9 minutes, it falls back to the terminal prompt.
+- When the app isn't running, the hook's `curl` fails instantly and Claude Code
+  behaves exactly as it does without the app.
+- Some prompts don't come through the hook, for example ones raised before the hooks were installed.
+  - **Terminal.app and iTerm:** **Allow** and **Deny** still work. The app reads the tab's
+    screen, finds Claude's numbered menu, and types the option number into that exact tab,
+    without switching windows. It types nothing unless the session is still waiting and the
+    menu is on screen; otherwise it just opens the terminal.
+  - **IDE terminals:** you get **Open <IDE>** instead.
+- `AskUserQuestion` isn't held. You get a heads-up popup and answer in the terminal.
+
+## Setup
+
+```sh
+# once
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+npm install
+
+npm run dev          # run in development
+npm run build -- --bundles app   # release build: src-tauri/target/release/bundle/macos/Claude Companion.app
+```
+
+Install it by copying the bundle to `/Applications` and opening it:
+
+```sh
+ditto "src-tauri/target/release/bundle/macos/Claude Companion.app" "/Applications/Claude Companion.app"
+open "/Applications/Claude Companion.app"
+```
+
+- On first launch the installed app turns on **Start at Login** (a LaunchAgent at
+  `~/Library/LaunchAgents/Claude Companion.plist`). You can toggle it in the tray menu.
+- Only one copy runs at a time.
+- The bundle is ad-hoc signed. That's fine for running it yourself; sharing it with others
+  needs a Developer ID signature and notarization.
+
+On first launch the app installs its hooks automatically. After that, the menu offers
+**Remove Claude Code hooks** and **Install Claude Code hooks**.
+
+- This adds entries to `~/.claude/settings.json`. Your existing hooks are left alone,
+  and a backup is saved as `settings.json.companion-bak`.
+- Running sessions pick up the hooks without a restart.
+- To see what the app knows, run `curl 127.0.0.1:47823/sessions`.
+
+The first time you use **Go to terminal** with iTerm2 or Terminal.app, macOS asks
+whether Claude Companion may control that app. Allow it.
+
+### Trying it without Claude
+
+With the app running:
+
+```sh
+scripts/simulate.sh start
+scripts/simulate.sh work         # icon blinks
+scripts/simulate.sh permission   # popup; the decision JSON prints when you click
+scripts/simulate.sh stop
+scripts/simulate.sh end
+```
+
+## Platform status
+
+| | macOS | Linux | Windows |
+|---|---|---|---|
+| Tray icon, status, popup | ✅ | should work (needs AppIndicator on GNOME) | should work |
+| Hook script | ✅ | ✅ | needs Git Bash `curl` (or switch to `http` hooks) |
+| Go to terminal | iTerm2 and Terminal.app focus the exact tab; VS Code, Cursor and JetBrains IDEs focus the project window; other terminals are just activated | not yet | not yet |
+
+## Layout
+
+- `src-tauri/src/server.rs`: HTTP endpoint and the permission round trip
+- `src-tauri/src/state.rs`: sessions and pending requests
+- `src-tauri/src/ui.rs`: tray icon animation, tray menu, popup placement
+- `src-tauri/src/discover.rs`: finds running sessions from Claude Code's session files
+- `src-tauri/src/focus.rs`: finding the Claude process and its terminal tab
+- `src-tauri/src/hooks_install.rs`: installs and removes hooks in `~/.claude/settings.json`
+- `ui/`: the popup (plain HTML/CSS/JS, no bundler)
+- `scripts/gen-icons.mjs`: draws the ghost icons as SVG and renders them to PNG (`npm run icons` also rebuilds the bundle icons)

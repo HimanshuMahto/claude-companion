@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="body" x1="0.3" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#ffc77a"/>
+      <stop offset="1" stop-color="#ff8418"/>
+    </linearGradient>
+    <radialGradient id="shade" cx="0.5" cy="1" r="0.6">
+      <stop offset="0" stop-color="#000" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.6"/>
+    </filter>
+  </defs>
+  
+  <g transform="translate(0 0)">
+    <path d="M12 32C12 21 21 13 32 13C43 13 52 21 52 32V50C52 54 49.5 55.5 47 55.5C44.8 55.5 43 54 42 52.2C41 54 39.2 55.5 37 55.5C34.8 55.5 33 54 32 52.2C31 54 29.2 55.5 27 55.5C24.8 55.5 23 54 22 52.2C21 54 19.2 55.5 17 55.5C14.5 55.5 12 54 12 50Z" fill="#ff9a2e" opacity=".75" filter="url(#glow)"/>
+    <path d="M12 32C12 21 21 13 32 13C43 13 52 21 52 32V50C52 54 49.5 55.5 47 55.5C44.8 55.5 43 54 42 52.2C41 54 39.2 55.5 37 55.5C34.8 55.5 33 54 32 52.2C31 54 29.2 55.5 27 55.5C24.8 55.5 23 54 22 52.2C21 54 19.2 55.5 17 55.5C14.5 55.5 12 54 12 50Z" fill="url(#body)"/>
+    <path d="M12 32C12 21 21 13 32 13C43 13 52 21 52 32V50C52 54 49.5 55.5 47 55.5C44.8 55.5 43 54 42 52.2C41 54 39.2 55.5 37 55.5C34.8 55.5 33 54 32 52.2C31 54 29.2 55.5 27 55.5C24.8 55.5 23 54 22 52.2C21 54 19.2 55.5 17 55.5C14.5 55.5 12 54 12 50Z" fill="url(#shade)"/>
+    <path d="M12 32C12 21 21 13 32 13C43 13 52 21 52 32V50C52 54 49.5 55.5 47 55.5C44.8 55.5 43 54 42 52.2C41 54 39.2 55.5 37 55.5C34.8 55.5 33 54 32 52.2C31 54 29.2 55.5 27 55.5C24.8 55.5 23 54 22 52.2C21 54 19.2 55.5 17 55.5C14.5 55.5 12 54 12 50Z" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width=".8"/>
+    <ellipse cx="42" cy="19.5" rx="4.6" ry="2.6" transform="rotate(32 42 19.5)" fill="#fff" opacity=".6"/>
+    <ellipse cx="25.5" cy="34" rx="5" ry="6" fill="#fff"/><ellipse cx="26.2" cy="34.6" rx="3.3" ry="4.3" fill="#1b1830"/><ellipse cx="38.5" cy="34" rx="5" ry="6" fill="#fff"/><ellipse cx="39.2" cy="34.6" rx="3.3" ry="4.3" fill="#1b1830"/>
+  </g>
+  <line x1="15.5" y1="8.5" x2="13.2" y2="3.5" stroke="#ffae3d" stroke-width="2.8" stroke-linecap="round"/><line x1="11.5" y1="12.5" x2="6.5" y2="9.8" stroke="#ffae3d" stroke-width="2.8" stroke-linecap="round"/>
+  
+</svg>

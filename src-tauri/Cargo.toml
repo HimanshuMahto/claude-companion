@@ -1,0 +1,27 @@
+[package]
+name = "claude-companion"
+version = "0.1.0"
+description = "Menu bar companion for Claude Code sessions"
+edition = "2021"
+
+[lib]
+name = "claude_companion_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+axum = "0.8"
+tokio = { version = "1", features = ["sync", "time", "net", "macros"] }
+dirs = "6"
+libc = "0.2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+window-vibrancy = "0.6"
