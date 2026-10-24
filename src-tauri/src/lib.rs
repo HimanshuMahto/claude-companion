@@ -4,11 +4,12 @@ mod hooks_install;
 mod login;
 #[cfg(target_os = "macos")]
 mod panel;
+mod placement;
 mod server;
 mod state;
 mod ui;
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, WebviewWindow};
 
 use state::{AppState, Decision, PendingView};
 
@@ -56,13 +57,21 @@ fn respond(app: AppHandle, state: State<AppState>, id: u64, action: String) {
     ui::refresh(&app);
 }
 
+/// The popup was dragged; remember where it was dropped.
+#[tauri::command]
+fn popup_moved(app: AppHandle, window: WebviewWindow) {
+    if placement::remember(&window) {
+        ui::refresh(&app);
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         // Must be registered first. A second launch (login + opening it by hand) just exits.
         .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![get_pending, respond])
+        .invoke_handler(tauri::generate_handler![get_pending, respond, popup_moved])
         .setup(|app| {
             // Menu bar only: no Dock icon, no app switcher entry.
             #[cfg(target_os = "macos")]

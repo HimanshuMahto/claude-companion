@@ -8,13 +8,14 @@ use tauri::{
     image::Image,
     menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager, PhysicalPosition,
+    AppHandle, Emitter, Manager,
 };
 
 use crate::discover;
 use crate::focus;
 use crate::hooks_install;
 use crate::login;
+use crate::placement;
 use crate::state::{now_ms, AppState, Status};
 
 const TRAY_ID: &str = "main";
@@ -71,6 +72,7 @@ fn icons() -> &'static Icons {
 }
 
 pub fn setup(app: &AppHandle) -> tauri::Result<()> {
+    placement::load();
     if hooks_install::is_first_run() {
         *LAST_ERROR.lock().unwrap() = hooks_install::install().err();
     }
@@ -135,20 +137,7 @@ pub fn show_prompt(app: &AppHandle) {
     if win.is_visible().unwrap_or(false) {
         return;
     }
-    // Top-right corner of the screen the mouse is on, like a system notification.
-    let monitor = win
-        .cursor_position()
-        .ok()
-        .and_then(|p| win.monitor_from_point(p.x, p.y).ok().flatten())
-        .or_else(|| win.primary_monitor().ok().flatten());
-    if let Some(monitor) = monitor {
-        let area = monitor.work_area();
-        let width = win.outer_size().map(|s| s.width as i32).unwrap_or(0);
-        let margin = (12.0 * monitor.scale_factor()) as i32;
-        let x = area.position.x + area.size.width as i32 - width - margin;
-        let y = area.position.y + margin;
-        let _ = win.set_position(PhysicalPosition::new(x, y));
-    }
+    placement::place(&win);
     // Deliberately not focused: a stray Enter while typing must never approve anything.
     let _ = win.show();
     #[cfg(target_os = "macos")]
@@ -164,10 +153,11 @@ fn build_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, bool)> {
     };
     let installed = HOOKS_INSTALLED.load(Ordering::Relaxed);
     let at_login = login::is_enabled(app);
+    let moved = placement::has_user_position();
     let error = LAST_ERROR.lock().unwrap().clone();
 
     let signature = format!(
-        "{pending}|{installed}|{at_login}|{error:?}|{}",
+        "{pending}|{installed}|{at_login}|{moved}|{error:?}|{}",
         sessions
             .iter()
             .map(|s| format!("{}:{}:{:?}", s.id, s.display_name(), s.status))
@@ -205,6 +195,9 @@ fn build_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, bool)> {
     } else {
         menu.append(&MenuItem::with_id(app, "install", "Install Claude Code hooks", true, None::<&str>)?)?;
     }
+    if moved {
+        menu.append(&MenuItem::with_id(app, "reset-position", "Reset popup position", true, None::<&str>)?)?;
+    }
     // Only the installed .app can register itself (see login::is_bundled).
     menu.append(&CheckMenuItem::with_id(app, "login", "Start at Login", login::is_bundled(), at_login, None::<&str>)?)?;
     if let Some(err) = error {
@@ -220,6 +213,10 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     match id {
         "quit" => app.exit(0),
         "show-pending" => show_prompt(app),
+        "reset-position" => {
+            placement::reset(app.get_webview_window(PROMPT_WINDOW).as_ref());
+            refresh(app);
+        }
         "login" => {
             *LAST_ERROR.lock().unwrap() = login::toggle(app).err();
             refresh(app);

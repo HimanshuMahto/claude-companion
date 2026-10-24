@@ -63,6 +63,23 @@ body {
   }
 }
 
+/* Hints that the popup can be dragged; any empty spot works, not just this. */
+.grip {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 36px;
+  height: 4px;
+  margin-left: -18px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: background 120ms;
+}
+
+.card:hover .grip {
+  background: rgba(255, 255, 255, 0.3);
+}
+
 /* Soft colored light behind the ghost. */
 .aura {
   position: absolute;

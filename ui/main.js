@@ -219,6 +219,15 @@ function describeQuestion(input) {
   };
 }
 
+// Drag the popup from any empty spot; buttons stay clickable and code stays selectable.
+$("card").addEventListener("mousedown", async (e) => {
+  if (e.button !== 0 || e.target.closest("button, pre, .target")) return;
+  e.preventDefault();
+  // Resolves once the native drag ends; then the app remembers the new spot.
+  await getCurrentWindow().startDragging();
+  invoke("popup_moved");
+});
+
 listen("pending-changed", load);
 setInterval(tick, 1000);
 load();

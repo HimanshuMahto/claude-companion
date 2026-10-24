@@ -27,6 +27,9 @@ Claude Code ──hook──▶ ~/.claude-companion/hook.sh ──POST──▶ 
   - **Go to terminal**: returns no decision, so Claude Code shows its usual prompt,
     and the app brings that tab to the front.
   - If you don't answer within 9 minutes, it falls back to the terminal prompt.
+- The popup opens in the top-right corner of the screen your mouse is on. Drag it anywhere
+  (any empty spot works) and later popups open in the same place, even after a restart.
+  **Reset popup position** in the tray menu puts it back.
 - When the app isn't running, the hook's `curl` fails instantly and Claude Code
   behaves exactly as it does without the app.
 - Some prompts don't come through the hook, for example ones raised before the hooks were installed.
@@ -98,6 +101,7 @@ scripts/simulate.sh end
 - `src-tauri/src/state.rs`: sessions and pending requests
 - `src-tauri/src/ui.rs`: tray icon animation, tray menu, popup placement
 - `src-tauri/src/discover.rs`: finds running sessions from Claude Code's session files
+- `src-tauri/src/placement.rs`: where the popup opens, and remembering where you dragged it
 - `src-tauri/src/focus.rs`: finding the Claude process and its terminal tab
 - `src-tauri/src/hooks_install.rs`: installs and removes hooks in `~/.claude/settings.json`
 - `ui/`: the popup (plain HTML/CSS/JS, no bundler)
