@@ -1,3 +1,6 @@
+//! Shared app state: the sessions we know about and the prompts waiting on
+//! the user. Everything sits behind one mutex in `AppState`.
+
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 

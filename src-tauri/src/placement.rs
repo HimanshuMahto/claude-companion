@@ -18,13 +18,14 @@ fn file() -> Option<PathBuf> {
 }
 
 pub fn load() {
-    let saved = file()
-        .and_then(|f| fs::read_to_string(f).ok())
-        .and_then(|text| {
-            let (x, y) = text.trim().split_once(' ')?;
-            Some((x.parse().ok()?, y.parse().ok()?))
-        });
-    *USER_POSITION.lock().unwrap() = saved;
+    let saved = file().and_then(|f| fs::read_to_string(f).ok());
+    *USER_POSITION.lock().unwrap() = saved.as_deref().and_then(parse_position);
+}
+
+/// Parses the saved "x y" line; anything else is ignored.
+fn parse_position(text: &str) -> Option<(i32, i32)> {
+    let (x, y) = text.trim().split_once(' ')?;
+    Some((x.parse().ok()?, y.parse().ok()?))
 }
 
 pub fn has_user_position() -> bool {
@@ -86,4 +87,23 @@ fn on_a_screen(win: &WebviewWindow, x: i32, y: i32) -> bool {
         let (p, s) = (m.position(), m.size());
         x >= p.x && y >= p.y && x < p.x + s.width as i32 && y < p.y + s.height as i32
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_saved_position() {
+        assert_eq!(parse_position("1840 64\n"), Some((1840, 64)));
+        // Screens left of or above the main one have negative coordinates.
+        assert_eq!(parse_position("-1200 -30"), Some((-1200, -30)));
+    }
+
+    #[test]
+    fn ignores_garbage() {
+        assert_eq!(parse_position(""), None);
+        assert_eq!(parse_position("1840"), None);
+        assert_eq!(parse_position("x y"), None);
+    }
 }

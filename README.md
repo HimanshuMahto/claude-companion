@@ -87,6 +87,13 @@ scripts/simulate.sh stop
 scripts/simulate.sh end
 ```
 
+## Troubleshooting
+
+- **The icon stays white while Claude is running.** The hooks aren't installed, or the session started before they were. Pick *Install Claude Code hooks* from the tray menu, then start a new Claude session.
+- **Allow/Deny doesn't type into the terminal.** macOS asks once for permission to control Terminal or iTerm. If you clicked *Don't Allow*, turn it back on in System Settings → Privacy & Security → Automation.
+- **The popup opens off to the side.** It reopens wherever you last dragged it. Use *Reset popup position* in the tray menu to put it back in the top-right corner.
+- **Seeing what the app knows.** `curl -s 127.0.0.1:47823/sessions` lists the sessions it's tracking.
+
 ## Platform status
 
 | | macOS | Linux | Windows |
@@ -99,9 +106,11 @@ scripts/simulate.sh end
 
 - `src-tauri/src/server.rs`: HTTP endpoint and the permission round trip
 - `src-tauri/src/state.rs`: sessions and pending requests
-- `src-tauri/src/ui.rs`: tray icon animation, tray menu, popup placement
+- `src-tauri/src/ui.rs`: tray icon animation, tray menu, showing and hiding the popup
 - `src-tauri/src/discover.rs`: finds running sessions from Claude Code's session files
 - `src-tauri/src/placement.rs`: where the popup opens, and remembering where you dragged it
+- `src-tauri/src/panel.rs`: macOS only; makes the popup float over every Space and full-screen app
+- `src-tauri/src/login.rs`: the Start at Login toggle
 - `src-tauri/src/focus.rs`: finding the Claude process and its terminal tab
 - `src-tauri/src/hooks_install.rs`: installs and removes hooks in `~/.claude/settings.json`
 - `ui/`: the popup (plain HTML/CSS/JS, no bundler)

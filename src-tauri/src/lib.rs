@@ -1,3 +1,6 @@
+//! Claude Companion: a menu bar app that shows what your Claude Code sessions
+//! are doing and lets you answer their permission prompts from a popup.
+
 mod discover;
 mod focus;
 mod hooks_install;

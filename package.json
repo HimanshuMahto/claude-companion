@@ -6,6 +6,7 @@
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml",
     "icons": "node scripts/gen-icons.mjs && tauri icon src-tauri/icons/app-source.png && rm -rf src-tauri/icons/android src-tauri/icons/ios"
   },
   "devDependencies": {
