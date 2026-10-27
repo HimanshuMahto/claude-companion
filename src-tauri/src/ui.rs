@@ -21,8 +21,6 @@ use crate::state::{now_ms, AppState, Status};
 const TRAY_ID: &str = "main";
 const PROMPT_WINDOW: &str = "prompt";
 const BLINK_MS: u64 = 600;
-/// Check for dead Claude processes every this many blink ticks (~15s).
-const PRUNE_EVERY: u32 = 25;
 /// How long the green "done" ghost shows before settling back to idle.
 const DONE_SECS: u64 = 45;
 
@@ -107,7 +105,7 @@ fn refresh_now(app: &AppHandle) {
         let state = app.state::<AppState>();
         let inner = state.0.lock().unwrap();
         let working = inner.sessions.iter().filter(|s| s.status == Status::Working).count();
-        let tooltip = match (inner.sessions.len(), inner.pending.len()) {
+        let tooltip = match (inner.sessions.len(), inner.attention()) {
             (0, _) => "Claude Companion: no sessions".to_string(),
             (n, 0) => format!("Claude Companion: {n} session(s), {working} working"),
             (n, p) => format!("Claude Companion: {n} session(s), {p} waiting on you"),
@@ -149,20 +147,31 @@ fn build_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, bool)> {
     let state = app.state::<AppState>();
     let (sessions, pending) = {
         let inner = state.0.lock().unwrap();
-        (inner.sessions.clone(), inner.pending.len())
+        (inner.sessions.clone(), inner.attention())
     };
     let installed = HOOKS_INSTALLED.load(Ordering::Relaxed);
     let at_login = login::is_enabled(app);
     let moved = placement::has_user_position();
     let error = LAST_ERROR.lock().unwrap().clone();
 
+    let items: Vec<(String, String)> = sessions
+        .iter()
+        .map(|s| {
+            let dot = match s.status {
+                Status::Working => "●",
+                Status::Waiting => "◆",
+                Status::Idle => "○",
+                Status::Done => "✓",
+            };
+            // Naming the app helps find sessions left running in an IDE tab.
+            let app = focus::app_name(&s.terminal);
+            let place = if app.is_empty() { String::new() } else { format!(" · {app}") };
+            (s.id.clone(), format!("{dot}  {}{place}: {}", s.display_name(), s.status.label()))
+        })
+        .collect();
     let signature = format!(
         "{pending}|{installed}|{at_login}|{moved}|{error:?}|{}",
-        sessions
-            .iter()
-            .map(|s| format!("{}:{}:{:?}", s.id, s.display_name(), s.status))
-            .collect::<Vec<_>>()
-            .join(",")
+        items.iter().map(|(id, label)| format!("{id}:{label}")).collect::<Vec<_>>().join(",")
     );
     let changed = {
         let mut last = MENU_SIGNATURE.lock().unwrap();
@@ -175,15 +184,8 @@ fn build_menu(app: &AppHandle) -> tauri::Result<(Menu<tauri::Wry>, bool)> {
     if sessions.is_empty() {
         menu.append(&MenuItem::with_id(app, "none", "No Claude sessions", false, None::<&str>)?)?;
     }
-    for s in &sessions {
-        let dot = match s.status {
-            Status::Working => "●",
-            Status::Waiting => "◆",
-            Status::Idle => "○",
-            Status::Done => "✓",
-        };
-        let label = format!("{dot}  {}: {}", s.display_name(), s.status.label());
-        menu.append(&MenuItem::with_id(app, format!("focus:{}", s.id), label, true, None::<&str>)?)?;
+    for (id, label) in items {
+        menu.append(&MenuItem::with_id(app, format!("focus:{id}"), label, true, None::<&str>)?)?;
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
     if pending > 0 {
@@ -281,9 +283,6 @@ async fn animate(app: AppHandle) {
     loop {
         tokio::time::sleep(Duration::from_millis(BLINK_MS)).await;
         tick = tick.wrapping_add(1);
-        if tick % PRUNE_EVERY == 0 {
-            prune_dead_sessions(&app);
-        }
 
         let icon = {
             let state = app.state::<AppState>();
@@ -298,8 +297,9 @@ async fn animate(app: AppHandle) {
                 }
             }
             let any = |st: Status| inner.sessions.iter().any(|s| s.status == st);
-            if !inner.pending.is_empty() {
-                &i.attention[inner.pending.len().min(i.attention.len()) - 1]
+            let attention = inner.attention();
+            if attention > 0 {
+                &i.attention[attention.min(i.attention.len()) - 1]
             } else if any(Status::Waiting) {
                 &i.waiting[frame]
             } else if any(Status::Working) {
@@ -324,23 +324,4 @@ async fn animate(app: AppHandle) {
             }
         }
     }
-}
-
-/// Drops sessions whose Claude process exited without a SessionEnd (killed terminal, crash).
-fn prune_dead_sessions(app: &AppHandle) {
-    let state = app.state::<AppState>();
-    let pids: Vec<(String, u32)> = {
-        let inner = state.0.lock().unwrap();
-        inner.sessions.iter().filter_map(|s| Some((s.id.clone(), s.terminal.claude_pid?))).collect()
-    };
-    let dead: Vec<String> = pids.into_iter().filter(|(_, pid)| !focus::is_alive(*pid)).map(|(id, _)| id).collect();
-    if dead.is_empty() {
-        return;
-    }
-    {
-        let mut inner = state.0.lock().unwrap();
-        inner.sessions.retain(|s| !dead.contains(&s.id));
-        inner.pending.retain(|p| !dead.contains(&p.view.session_id));
-    }
-    refresh(app);
 }

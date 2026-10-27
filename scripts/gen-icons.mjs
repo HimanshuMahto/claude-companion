@@ -143,6 +143,7 @@ for (const [name, svg] of Object.entries(tray)) write(join(TRAY, `${name}.png`),
 write(join(ROOT, "src-tauri", "icons", "app-source.png"), png(appIcon(), 1024));
 write(join(ROOT, "ui", "ghost-permission.svg"), ghost({ color: "orange", spark: "left" }));
 write(join(ROOT, "ui", "ghost-question.svg"), ghost({ color: "blue", spark: "right" }));
+write(join(ROOT, "ui", "ghost-done.svg"), ghost({ color: "green", eyes: "happy", spark: "right" }));
 
 // Side-by-side sheet for eyeballing the set: PREVIEW=/path/sheet.png npm run icons
 const names = Object.keys(tray);

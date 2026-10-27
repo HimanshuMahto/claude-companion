@@ -34,7 +34,7 @@ fn respond(app: AppHandle, state: State<AppState>, id: u64, action: String) {
         let mut inner = state.0.lock().unwrap();
         let pending = inner.take_pending(id);
         // Handled: don't pop this same wait up again while the session catches up.
-        if let Some(p) = &pending {
+        if let Some(p) = pending.as_ref().filter(|p| p.view.kind != "done") {
             inner.set_quiet(&p.view.session_id);
         }
         pending

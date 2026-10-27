@@ -53,6 +53,10 @@ pub struct Session {
     pub quiet: bool,
     /// What a waiting session waits for, per Claude Code ("permission prompt", ...).
     pub waiting_for: Option<String>,
+    /// What the user last asked for, from the UserPromptSubmit hook.
+    pub last_prompt: Option<String>,
+    /// When a hook last reported this session (epoch ms).
+    pub last_seen: u64,
     pub terminal: Terminal,
 }
 
@@ -76,6 +80,7 @@ pub struct PendingView {
     /// "permission": a hooked request, held until Allow/Deny/Go to terminal.
     /// "question": AskUserQuestion, answered in the terminal.
     /// "prompt": a terminal prompt we can only point at (no hook involved).
+    /// "done": a task just finished; closes itself after `timeout_secs`.
     pub kind: &'static str,
     pub session_id: String,
     pub project: String,
@@ -116,6 +121,11 @@ impl Inner {
     pub fn next_id(&mut self) -> u64 {
         self.next_id += 1;
         self.next_id
+    }
+
+    /// Pending entries that need the user, i.e. everything but "done" notices.
+    pub fn attention(&self) -> usize {
+        self.pending.iter().filter(|p| p.view.kind != "done").count()
     }
 
     pub fn has_pending_for(&self, session_id: &str) -> bool {

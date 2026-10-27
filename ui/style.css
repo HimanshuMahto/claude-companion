@@ -19,6 +19,13 @@
   --radius: 16px;
 }
 
+.card[data-kind="done"] {
+  --accent: #3be39a;
+  --accent-2: #1fbf78;
+  --accent-soft: rgba(59, 227, 154, 0.14);
+  --accent-glow: rgba(59, 227, 154, 0.3);
+}
+
 .card[data-kind="question"] {
   --accent: #4fa8ff;
   --accent-2: #2d7cf6;
@@ -247,6 +254,26 @@ button svg {
   border-top: 1px solid var(--line);
   font: 12px/1.55 ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* The prompt on a "task finished" notice is prose, not a path. */
+.card[data-kind="done"] .target {
+  font: 12px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Ubuntu, sans-serif;
+}
+
+/* Claude's closing message on a "task finished" notice. */
+.body .reply {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+  margin: 0;
+  padding: 9px 12px 11px;
+  border-top: 1px solid var(--line);
+  white-space: pre-line;
   word-break: break-word;
   user-select: text;
   -webkit-user-select: text;

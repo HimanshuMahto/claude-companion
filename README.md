@@ -39,6 +39,12 @@ Claude Code ──hook──▶ ~/.claude-companion/hook.sh ──POST──▶ 
     menu is on screen; otherwise it just opens the terminal.
   - **IDE terminals:** you get **Open <IDE>** instead.
 - `AskUserQuestion` isn't held. You get a heads-up popup and answer in the terminal.
+- When a task finishes, a green **Task finished** popup shows what you asked and Claude's
+  last message, with **Open <terminal>** to jump to it. It closes itself after 12 seconds,
+  and waits behind any permission popup.
+- Sessions disappear from the tray menu within a couple of seconds of their Claude process
+  exiting, even if the tab was killed without a `SessionEnd`. Each entry names the app it runs
+  in, so a session still running in an IDE tab is easy to spot.
 
 ## Setup
 
@@ -92,6 +98,7 @@ scripts/simulate.sh end
 - **The icon stays white while Claude is running.** The hooks aren't installed, or the session started before they were. Pick *Install Claude Code hooks* from the tray menu, then start a new Claude session.
 - **Allow/Deny doesn't type into the terminal.** macOS asks once for permission to control Terminal or iTerm. If you clicked *Don't Allow*, turn it back on in System Settings → Privacy & Security → Automation.
 - **The popup opens off to the side.** It reopens wherever you last dragged it. Use *Reset popup position* in the tray menu to put it back in the top-right corner.
+- **A session you closed is still in the menu.** Its Claude process is still running. Check the app named next to it; IDE terminals often keep running after their panel is hidden.
 - **Seeing what the app knows.** `curl -s 127.0.0.1:47823/sessions` lists the sessions it's tracking.
 
 ## Platform status

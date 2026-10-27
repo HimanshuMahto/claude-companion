@@ -34,7 +34,8 @@ async function load() {
 
 function render() {
   const card = $("card");
-  const req = pending[0];
+  // "Task finished" notices wait behind anything that needs an answer.
+  const req = current();
   if (!req) {
     card.hidden = true;
     shownId = null;
@@ -50,15 +51,16 @@ function render() {
   }
 
   const question = req.kind === "question";
+  const done = req.kind === "done";
   const app = req.terminal_app || "terminal";
 
-  $("mascot").src = question ? "ghost-question.svg" : "ghost-permission.svg";
-  $("eyebrow").textContent = question ? "Claude has a question" : "Permission needed";
+  $("mascot").src = done ? "ghost-done.svg" : question ? "ghost-question.svg" : "ghost-permission.svg";
+  $("eyebrow").textContent = done ? "Task finished" : question ? "Claude has a question" : "Permission needed";
   $("title").textContent = req.project;
   $("meta").textContent = [req.terminal_app, req.session_name].filter(Boolean).join(" · ") || req.cwd;
   $("counter").textContent = pending.length > 1 ? `1 / ${pending.length}` : "";
 
-  const view = question ? describeQuestion(req.tool_input) : describeTool(req);
+  const view = done ? describeDone(req.tool_input) : question ? describeQuestion(req.tool_input) : describeTool(req);
   $("tool").hidden = !view.chip;
   $("chip").innerHTML = view.chip ? `${icon(view.icon)}${esc(view.chip)}` : "";
   $("target").innerHTML = view.target || "";
@@ -101,16 +103,21 @@ async function respond(id, action) {
   await invoke("respond", { id, action });
 }
 
+function current() {
+  return pending.find((p) => p.kind !== "done") ?? pending[0];
+}
+
 function tick() {
-  const req = pending[0];
+  const req = current();
   const footer = $("footer");
-  footer.hidden = !req || req.kind !== "permission";
+  footer.hidden = !req || (req.kind !== "permission" && req.kind !== "done");
   if (footer.hidden) return;
   const total = req.timeout_secs * 1000;
   const left = Math.max(0, req.created_at + total - Date.now());
   const m = Math.floor(left / 60000);
   const s = String(Math.floor((left % 60000) / 1000)).padStart(2, "0");
-  $("footer-text").textContent = `Hands back to ${req.terminal_app || "the terminal"} in ${m}:${s}`;
+  $("footer-text").textContent =
+    req.kind === "done" ? `Closes in ${m}:${s}` : `Hands back to ${req.terminal_app || "the terminal"} in ${m}:${s}`;
   $("bar").style.width = `${(left / total) * 100}%`;
 }
 
@@ -219,9 +226,19 @@ function describeQuestion(input) {
   };
 }
 
+function describeDone(input) {
+  const { prompt, reply } = input || {};
+  return {
+    chip: "Done",
+    icon: "check",
+    target: prompt ? `<span class="dir">${esc(prompt.replace(/\s+/g, " "))}</span>` : "",
+    body: reply ? `<p class="reply">${esc(reply)}</p>` : "",
+  };
+}
+
 // Drag the popup from any empty spot; buttons stay clickable and code stays selectable.
 $("card").addEventListener("mousedown", async (e) => {
-  if (e.button !== 0 || e.target.closest("button, pre, .target")) return;
+  if (e.button !== 0 || e.target.closest("button, pre, .target, .reply")) return;
   e.preventDefault();
   // Resolves once the native drag ends; then the app remembers the new spot.
   await getCurrentWindow().startDragging();

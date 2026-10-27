@@ -18,6 +18,7 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Manager};
 use tokio::sync::oneshot;
 
+use crate::discover;
 use crate::focus;
 use crate::state::{now_ms, project_name, AppState, Decision, Pending, PendingView, Session, Status, Terminal};
 use crate::ui;
@@ -26,6 +27,8 @@ pub const PORT: u16 = 47823;
 /// How long the popup waits before handing the prompt back to the terminal.
 /// Must stay below the hook's curl --max-time and Claude Code's hook timeout.
 pub const PROMPT_TIMEOUT_SECS: u64 = 540;
+/// How long a "task finished" notice stays up.
+pub const DONE_TIMEOUT_SECS: u64 = 12;
 
 pub async fn serve(app: AppHandle) {
     let router = Router::new()
@@ -110,8 +113,20 @@ async fn hook(State(app): State<AppHandle>, headers: HeaderMap, body: String) ->
         "PermissionRequest" => Some(Status::Waiting),
         _ => None,
     };
+    if name == "UserPromptSubmit" {
+        let prompt = str_field(&event, "prompt");
+        let state = app.state::<AppState>();
+        let mut inner = state.0.lock().unwrap();
+        if let Some(s) = inner.session_mut(&session_id) {
+            s.last_prompt = (!prompt.is_empty()).then_some(prompt);
+        }
+    }
     if let Some(status) = status {
-        set_status(&app, &session_id, status);
+        let was_working = set_status(&app, &session_id, status) == Some(Status::Working);
+        if status == Status::Done && was_working {
+            let reply = str_field(&event, "last_assistant_message");
+            announce_done(&app, &session_id, (!reply.is_empty()).then_some(reply));
+        }
     }
 
     if name != "PermissionRequest" {
@@ -188,6 +203,42 @@ impl Drop for PendingGuard {
     }
 }
 
+/// Shows a "task finished" notice for a session that just finished a turn.
+/// `reply` is Claude's last message when the hook provided it.
+pub fn announce_done(app: &AppHandle, session_id: &str, reply: Option<String>) {
+    let state = app.state::<AppState>();
+    let session = {
+        let mut inner = state.0.lock().unwrap();
+        // Something more important is already up for this session.
+        if inner.pending.iter().any(|p| p.view.session_id == session_id && p.view.kind != "done") {
+            return;
+        }
+        inner.pending.retain(|p| p.view.session_id != session_id);
+        inner.session(session_id).map(|s| (s.cwd.clone(), s.last_prompt.clone()))
+    };
+    let Some((cwd, prompt)) = session else { return };
+    // Sessions that predate the hooks only have their transcript to go on.
+    let (prompt, reply) = match (prompt, reply) {
+        (Some(prompt), Some(reply)) => (Some(prompt), Some(reply)),
+        (prompt, reply) => {
+            let (p, r) = discover::last_exchange(&cwd, session_id);
+            (prompt.or(p), reply.or(r))
+        }
+    };
+    let input = json!({ "prompt": prompt, "reply": reply });
+    let id = add_pending(app, "done", session_id, &cwd, String::new(), input, None);
+
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(DONE_TIMEOUT_SECS));
+        let state = app.state::<AppState>();
+        let removed = state.0.lock().unwrap().take_pending(id).is_some();
+        if removed {
+            ui::refresh(&app);
+        }
+    });
+}
+
 pub fn add_pending(
     app: &AppHandle,
     kind: &'static str,
@@ -224,7 +275,7 @@ pub fn add_pending(
             tool_name,
             tool_input,
             created_at: now_ms(),
-            timeout_secs: PROMPT_TIMEOUT_SECS,
+            timeout_secs: if kind == "done" { DONE_TIMEOUT_SECS } else { PROMPT_TIMEOUT_SECS },
             can_answer,
         },
         reply,
@@ -240,7 +291,10 @@ fn track_session(app: &AppHandle, session_id: &str, cwd: &str, headers: &HeaderM
         let mut inner = state.0.lock().unwrap();
         match inner.session_mut(session_id) {
             // Keep the launch directory; the hook's cwd follows wherever Claude cd'd to.
-            Some(s) => s.terminal.claude_pid.is_none(),
+            Some(s) => {
+                s.last_seen = now_ms();
+                s.terminal.claude_pid.is_none()
+            }
             None => {
                 inner.sessions.push(Session {
                     id: session_id.to_string(),
@@ -248,6 +302,8 @@ fn track_session(app: &AppHandle, session_id: &str, cwd: &str, headers: &HeaderM
                     name: None,
                     quiet: false,
                     waiting_for: None,
+                    last_prompt: None,
+                    last_seen: now_ms(),
                     status: Status::Idle,
                     since: now_ms(),
                     terminal: Terminal {
@@ -288,23 +344,26 @@ fn clear_terminal_popups(app: &AppHandle, session_id: &str) {
     }
 }
 
-fn set_status(app: &AppHandle, session_id: &str, status: Status) {
+/// Returns the status the session had before, if it changed.
+fn set_status(app: &AppHandle, session_id: &str, status: Status) -> Option<Status> {
     let state = app.state::<AppState>();
-    let changed = {
+    let previous = {
         let mut inner = state.0.lock().unwrap();
         match inner.session_mut(session_id) {
             Some(s) if s.status != status => {
+                let previous = s.status;
                 s.status = status;
                 s.quiet &= status == Status::Waiting;
                 s.since = now_ms();
-                true
+                Some(previous)
             }
-            _ => false,
+            _ => None,
         }
     };
-    if changed {
+    if previous.is_some() {
         ui::refresh(app);
     }
+    previous
 }
 
 fn header(headers: &HeaderMap, name: &str) -> Option<String> {
