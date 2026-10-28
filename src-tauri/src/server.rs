@@ -101,9 +101,14 @@ async fn hook(State(app): State<AppHandle>, headers: HeaderMap, body: String) ->
         clear_terminal_popups(&app, &session_id);
     }
 
+    let tool_name = str_field(&event, "tool_name");
+    let tool_input = event.get("tool_input").cloned().unwrap_or(Value::Null);
+    let asking = name == "PreToolUse" && tool_name == "AskUserQuestion";
+
     let status = match name.as_str() {
         "SessionStart" => Some(Status::Idle),
         "Stop" => Some(Status::Done),
+        "PreToolUse" if asking => Some(Status::Waiting),
         "UserPromptSubmit" | "PreToolUse" | "PostToolUse" => Some(Status::Working),
         "Notification" => match str_field(&event, "notification_type").as_str() {
             "idle_prompt" => Some(Status::Idle),
@@ -129,24 +134,22 @@ async fn hook(State(app): State<AppHandle>, headers: HeaderMap, body: String) ->
         }
     }
 
-    if name != "PermissionRequest" {
+    // Questions need the terminal's own picker, so don't hold Claude up: show a
+    // heads-up popup and let Claude Code prompt in the terminal right away.
+    // PreToolUse fires in every permission mode; PermissionRequest doesn't
+    // (auto mode skips it), so the popup comes from PreToolUse alone.
+    if asking {
+        if !in_front(&app, &session_id).await {
+            add_pending(&app, "question", &session_id, &cwd, tool_name, tool_input, None);
+        }
         return Ok(empty());
     }
-
-    let tool_name = str_field(&event, "tool_name");
-    let tool_input = event.get("tool_input").cloned().unwrap_or(Value::Null);
+    if name != "PermissionRequest" || tool_name == "AskUserQuestion" {
+        return Ok(empty());
+    }
 
     // You're already in this session's tab: let Claude Code ask you there.
-    let terminal = session_terminal(&app, &session_id);
-    let in_front = tokio::task::spawn_blocking(move || terminal.is_some_and(|t| focus::is_in_front(&t)));
-    if in_front.await.unwrap_or(false) {
-        return Ok(empty());
-    }
-
-    // Questions need the terminal's own picker, so don't hold Claude up: show
-    // a heads-up popup and let Claude Code prompt in the terminal right away.
-    if tool_name == "AskUserQuestion" {
-        add_pending(&app, "question", &session_id, &cwd, tool_name, tool_input, None);
+    if in_front(&app, &session_id).await {
         return Ok(empty());
     }
 
@@ -375,6 +378,14 @@ fn set_status(app: &AppHandle, session_id: &str, status: Status) -> Option<Statu
         ui::refresh(app);
     }
     previous
+}
+
+/// Whether this session's terminal tab is the one you're looking at.
+async fn in_front(app: &AppHandle, session_id: &str) -> bool {
+    let terminal = session_terminal(app, session_id);
+    tokio::task::spawn_blocking(move || terminal.is_some_and(|t| focus::is_in_front(&t)))
+        .await
+        .unwrap_or(false)
 }
 
 pub fn session_terminal(app: &AppHandle, session_id: &str) -> Option<Terminal> {

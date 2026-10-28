@@ -24,7 +24,7 @@ case "$1" in
   start) send "{$base,\"hook_event_name\":\"SessionStart\",\"source\":\"startup\"}" ;;
   work) send "{$base,\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"Add a dark mode toggle to the settings page\"}" ;;
   permission) send "{$base,\"hook_event_name\":\"PermissionRequest\",\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm -rf node_modules && npm install\",\"description\":\"Reinstall dependencies\"}}" ;;
-  question) send "{$base,\"hook_event_name\":\"PermissionRequest\",\"tool_name\":\"AskUserQuestion\",\"tool_input\":{\"questions\":[{\"question\":\"Which database should we use?\"}]}}" ;;
+  question) send "{$base,\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"AskUserQuestion\",\"tool_input\":{\"questions\":[{\"question\":\"Which database should we use?\"}]}}" ;;
   stop) send "{$base,\"hook_event_name\":\"Stop\",\"last_assistant_message\":\"Added a dark mode toggle to Settings. It follows the system theme by default and remembers your choice.\"}" ;;
   end) send "{$base,\"hook_event_name\":\"SessionEnd\",\"reason\":\"other\"}" ;;
   *) sed -n '2,10p' "$0"; exit 1 ;;

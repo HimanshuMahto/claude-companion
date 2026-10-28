@@ -266,10 +266,8 @@ button svg {
 
 /* Claude's closing message on a "task finished" notice. */
 .body .reply {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 5;
-  overflow: hidden;
+  max-height: 150px;
+  overflow: auto;
   margin: 0;
   padding: 9px 12px 11px;
   border-top: 1px solid var(--line);
@@ -305,11 +303,13 @@ button svg {
   color: var(--faint);
 }
 
-pre::-webkit-scrollbar {
+pre::-webkit-scrollbar,
+.reply::-webkit-scrollbar {
   width: 6px;
 }
 
-pre::-webkit-scrollbar-thumb {
+pre::-webkit-scrollbar-thumb,
+.reply::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.15);
   border-radius: 3px;
 }
