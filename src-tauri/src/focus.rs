@@ -186,6 +186,45 @@ end tell"#,
     ))
 }
 
+/// Whether the user is looking at this session's tab right now: its terminal
+/// is the frontmost app and the tab is selected in the front window. Only
+/// Terminal.app and iTerm say which tab that is; for IDE terminals this is
+/// always false, so their popups keep showing.
+#[cfg(target_os = "macos")]
+pub fn is_in_front(t: &Terminal) -> bool {
+    let (bundle, script) = match t.term_program.as_str() {
+        "Apple_Terminal" => ("com.apple.Terminal", r#"tell application "Terminal" to return tty of selected tab of front window"#),
+        "iTerm.app" => (
+            "com.googlecode.iterm2",
+            r#"tell application "iTerm" to tell current session of current window to return (unique id) & " " & tty"#,
+        ),
+        _ => return false,
+    };
+    // Checked first so a scripting call never launches or wakes a terminal app.
+    if frontmost_bundle().as_deref() != Some(bundle) {
+        return false;
+    }
+    let Some(front) = osascript(script) else { return false };
+    let uid = t.iterm_session.split(':').nth(1).unwrap_or("");
+    let tty = t.tty.as_deref().unwrap_or("");
+    front.split_whitespace().any(|id| (!uid.is_empty() && id == uid) || (!tty.is_empty() && id == tty))
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn is_in_front(_t: &Terminal) -> bool {
+    false
+}
+
+/// Bundle id of the frontmost app, e.g. "com.apple.Terminal".
+#[cfg(target_os = "macos")]
+fn frontmost_bundle() -> Option<String> {
+    let run = |args: &[&str]| Command::new("lsappinfo").args(args).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+    let front = run(&["front"])?;
+    // Prints: "CFBundleIdentifier"="com.apple.Terminal"
+    let info = run(&["info", "-only", "bundleid", &front])?;
+    Some(info.rsplit_once('=')?.1.trim_matches('"').to_string())
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum Answer {
     Allow,

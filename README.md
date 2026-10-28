@@ -39,6 +39,10 @@ Claude Code ──hook──▶ ~/.claude-companion/hook.sh ──POST──▶ 
     menu is on screen; otherwise it just opens the terminal.
   - **IDE terminals:** you get **Open <IDE>** instead.
 - `AskUserQuestion` isn't held. You get a heads-up popup and answer in the terminal.
+- No popup for the tab you're in: if a Terminal.app or iTerm session asks while its tab is in
+  front, Claude Code asks right there. Switch into a session's tab while its popup is up and the
+  popup hands the question to the terminal; leave with it unanswered and the popup comes back.
+  IDE terminals don't say which tab is active, so their popups always show.
 - When a task finishes, a green **Task finished** popup shows what you asked and Claude's
   last message, with **Open <terminal>** to jump to it. It closes itself after 12 seconds,
   and waits behind any permission popup.

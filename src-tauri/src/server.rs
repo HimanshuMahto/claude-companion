@@ -136,6 +136,13 @@ async fn hook(State(app): State<AppHandle>, headers: HeaderMap, body: String) ->
     let tool_name = str_field(&event, "tool_name");
     let tool_input = event.get("tool_input").cloned().unwrap_or(Value::Null);
 
+    // You're already in this session's tab: let Claude Code ask you there.
+    let terminal = session_terminal(&app, &session_id);
+    let in_front = tokio::task::spawn_blocking(move || terminal.is_some_and(|t| focus::is_in_front(&t)));
+    if in_front.await.unwrap_or(false) {
+        return Ok(empty());
+    }
+
     // Questions need the terminal's own picker, so don't hold Claude up: show
     // a heads-up popup and let Claude Code prompt in the terminal right away.
     if tool_name == "AskUserQuestion" {
@@ -217,6 +224,10 @@ pub fn announce_done(app: &AppHandle, session_id: &str, reply: Option<String>) {
         inner.session(session_id).map(|s| (s.cwd.clone(), s.last_prompt.clone()))
     };
     let Some((cwd, prompt)) = session else { return };
+    // You watched it finish.
+    if session_terminal(app, session_id).is_some_and(|t| focus::is_in_front(&t)) {
+        return;
+    }
     // Sessions that predate the hooks only have their transcript to go on.
     let (prompt, reply) = match (prompt, reply) {
         (Some(prompt), Some(reply)) => (Some(prompt), Some(reply)),
@@ -364,6 +375,12 @@ fn set_status(app: &AppHandle, session_id: &str, status: Status) -> Option<Statu
         ui::refresh(app);
     }
     previous
+}
+
+pub fn session_terminal(app: &AppHandle, session_id: &str) -> Option<Terminal> {
+    let state = app.state::<AppState>();
+    let inner = state.0.lock().unwrap();
+    inner.session(session_id).map(|s| s.terminal.clone())
 }
 
 fn header(headers: &HeaderMap, name: &str) -> Option<String> {

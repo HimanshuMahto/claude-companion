@@ -15,7 +15,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::focus;
 use crate::server;
-use crate::state::{now_ms, AppState, Inner, Session, Status, Terminal};
+use crate::state::{now_ms, AppState, Decision, Inner, Session, Status, Terminal};
 use crate::ui;
 
 const SCAN_EVERY: Duration = Duration::from_secs(2);
@@ -150,15 +150,27 @@ fn scan(app: &AppHandle) {
     let before = inner.pending.len();
     inner.pending.retain(|p| p.view.kind != "prompt" || waiting.contains(&p.view.session_id));
     changed |= inner.pending.len() != before;
-    let to_announce: Vec<(String, String)> = inner
+    let to_announce: Vec<(String, String, Terminal)> = inner
         .sessions
         .iter()
         .filter(|s| s.status == Status::Waiting && !s.quiet && !inner.has_pending_for(&s.id))
-        .map(|s| (s.id.clone(), s.cwd.clone()))
+        .map(|s| (s.id.clone(), s.cwd.clone(), s.terminal.clone()))
+        .collect();
+    let with_popup: Vec<(String, Terminal)> = inner
+        .sessions
+        .iter()
+        .filter(|s| inner.has_pending_for(&s.id))
+        .map(|s| (s.id.clone(), s.terminal.clone()))
         .collect();
     drop(inner);
 
-    for (session_id, cwd) in to_announce {
+    // The prompt is already in front of you; it pops up once you leave the tab.
+    let to_announce = to_announce.into_iter().filter(|(_, _, t)| !focus::is_in_front(t));
+    for (session_id, _) in with_popup.into_iter().filter(|(_, t)| focus::is_in_front(t)) {
+        hand_to_terminal(&state, &session_id);
+        changed = true;
+    }
+    for (session_id, cwd, _) in to_announce {
         let (tool_name, tool_input) = last_tool_call(&cwd, &session_id).unwrap_or_default();
         server::add_pending(app, "prompt", &session_id, &cwd, tool_name, tool_input, None);
     }
@@ -167,6 +179,18 @@ fn scan(app: &AppHandle) {
     }
     if changed {
         ui::refresh(app);
+    }
+}
+
+/// The user switched to this session's tab, so its popups go: a held
+/// permission request is released so Claude Code asks in the terminal.
+fn hand_to_terminal(state: &AppState, session_id: &str) {
+    let mut inner = state.0.lock().unwrap();
+    let ids: Vec<u64> = inner.pending.iter().filter(|p| p.view.session_id == session_id).map(|p| p.view.id).collect();
+    for id in ids {
+        if let Some(reply) = inner.take_pending(id).and_then(|p| p.reply) {
+            let _ = reply.send(Decision::Terminal);
+        }
     }
 }
 
