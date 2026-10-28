@@ -4,6 +4,10 @@ use std::process::Command;
 
 use crate::state::Terminal;
 
+/// How recently you must have typed into an IDE terminal tab to count as being in it.
+#[cfg(target_os = "macos")]
+const TYPED_WITHIN: std::time::Duration = std::time::Duration::from_secs(3 * 60);
+
 const SHELLS: &[&str] = &["sh", "bash", "zsh", "fish", "dash", "nu", "login"];
 
 /// Walks up from the hook script's parent process to the Claude Code process
@@ -186,10 +190,10 @@ end tell"#,
     ))
 }
 
-/// Whether the user is looking at this session's tab right now: its terminal
-/// is the frontmost app and the tab is selected in the front window. Only
-/// Terminal.app and iTerm say which tab that is; for IDE terminals this is
-/// always false, so their popups keep showing.
+/// Whether the user is looking at this session's tab right now. Terminal.app
+/// and iTerm say which tab is selected in their front window. IDE terminals
+/// don't, so for those it's the tab you last typed into, if that was recent
+/// and the IDE is still the frontmost app.
 #[cfg(target_os = "macos")]
 pub fn is_in_front(t: &Terminal) -> bool {
     let (bundle, script) = match t.term_program.as_str() {
@@ -198,7 +202,12 @@ pub fn is_in_front(t: &Terminal) -> bool {
             "com.googlecode.iterm2",
             r#"tell application "iTerm" to tell current session of current window to return (unique id) & " " & tty"#,
         ),
-        _ => return false,
+        _ => {
+            let Some(tty) = t.tty.as_deref() else { return false };
+            return !t.bundle_id.is_empty()
+                && frontmost_bundle().as_deref() == Some(t.bundle_id.as_str())
+                && typed_here_last(tty);
+        }
     };
     // Checked first so a scripting call never launches or wakes a terminal app.
     if frontmost_bundle().as_deref() != Some(bundle) {
@@ -208,6 +217,23 @@ pub fn is_in_front(t: &Terminal) -> bool {
     let uid = t.iterm_session.split(':').nth(1).unwrap_or("");
     let tty = t.tty.as_deref().unwrap_or("");
     front.split_whitespace().any(|id| (!uid.is_empty() && id == uid) || (!tty.is_empty() && id == tty))
+}
+
+/// Whether `tty` is the terminal the user typed into most recently, within
+/// `TYPED_WITHIN`. A tty's access time moves when the program in it reads
+/// keyboard input, and not when it prints.
+#[cfg(target_os = "macos")]
+fn typed_here_last(tty: &str) -> bool {
+    let typed_at = |path: &std::path::Path| std::fs::metadata(path).and_then(|m| m.accessed()).ok();
+    let Some(mine) = typed_at(std::path::Path::new(tty)) else { return false };
+    if mine.elapsed().map_or(true, |e| e > TYPED_WITHIN) {
+        return false;
+    }
+    let Ok(devices) = std::fs::read_dir("/dev") else { return false };
+    devices
+        .flatten()
+        .filter(|d| d.file_name().to_string_lossy().starts_with("ttys"))
+        .all(|d| typed_at(&d.path()).is_none_or(|other| other <= mine))
 }
 
 #[cfg(not(target_os = "macos"))]

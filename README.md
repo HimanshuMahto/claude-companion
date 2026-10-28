@@ -42,7 +42,8 @@ Claude Code ──hook──▶ ~/.claude-companion/hook.sh ──POST──▶ 
 - No popup for the tab you're in: if a Terminal.app or iTerm session asks while its tab is in
   front, Claude Code asks right there. Switch into a session's tab while its popup is up and the
   popup hands the question to the terminal; leave with it unanswered and the popup comes back.
-  IDE terminals don't say which tab is active, so their popups always show.
+  IDE terminals don't say which tab is active, so there it's the tab you last typed into, if
+  that was in the last 3 minutes and the IDE is still the app in front.
 - When a task finishes, a green **Task finished** popup shows what you asked and Claude's
   last message, with **Open <terminal>** to jump to it. It closes itself after 12 seconds,
   and waits behind any permission popup.
