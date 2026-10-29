@@ -49,9 +49,12 @@ pub async fn serve(app: AppHandle) {
 
 /// Debug view of what the app currently knows: `curl 127.0.0.1:47823/sessions`
 async fn sessions(State(app): State<AppHandle>) -> Json<Value> {
+    let handle = app.clone();
+    let popup = tokio::task::spawn_blocking(move || ui::popup_debug(&handle)).await.unwrap_or_default();
     let state = app.state::<AppState>();
     let inner = state.0.lock().unwrap();
     Json(json!({
+        "popup": popup,
         "sessions": inner.sessions.iter().map(|s| json!({
             "id": s.id,
             "cwd": s.cwd,

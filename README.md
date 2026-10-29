@@ -27,6 +27,9 @@ Claude Code ──hook──▶ ~/.claude-companion/hook.sh ──POST──▶ 
   - **Go to terminal**: returns no decision, so Claude Code shows its usual prompt,
     and the app brings that tab to the front.
   - If you don't answer within 9 minutes, it falls back to the terminal prompt.
+- The popup never takes keyboard focus, ignores keyboard presses of its buttons, and ignores
+  clicks for the first 0.6 seconds after it appears, so a click or Enter meant for another app
+  can't approve anything.
 - The popup opens in the top-right corner of the screen your mouse is on. Drag it anywhere
   (any empty spot works) and later popups open in the same place, even after a restart.
   **Reset popup position** in the tray menu puts it back.
@@ -104,6 +107,7 @@ scripts/simulate.sh end
 - **Allow/Deny doesn't type into the terminal.** macOS asks once for permission to control Terminal or iTerm. If you clicked *Don't Allow*, turn it back on in System Settings → Privacy & Security → Automation.
 - **The popup opens off to the side.** It reopens wherever you last dragged it. Use *Reset popup position* in the tray menu to put it back in the top-right corner.
 - **A session you closed is still in the menu.** Its Claude process is still running. Check the app named next to it; IDE terminals often keep running after their panel is hidden.
+- **The badge is orange but no popup appears.** After the Mac wakes from sleep, macOS can stop putting the popup on screen. The app checks for this every couple of seconds: it shows the popup again, and if that doesn't work, it relaunches itself (at most once every 10 minutes). Each attempt is logged in `~/.claude-companion/popup.log`.
 - **Seeing what the app knows.** `curl -s 127.0.0.1:47823/sessions` lists the sessions it's tracking.
 
 ## Platform status

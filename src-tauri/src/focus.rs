@@ -243,7 +243,7 @@ pub fn is_in_front(_t: &Terminal) -> bool {
 
 /// Bundle id of the frontmost app, e.g. "com.apple.Terminal".
 #[cfg(target_os = "macos")]
-fn frontmost_bundle() -> Option<String> {
+pub fn frontmost_bundle() -> Option<String> {
     let run = |args: &[&str]| Command::new("lsappinfo").args(args).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
     let front = run(&["front"])?;
     // Prints: "CFBundleIdentifier"="com.apple.Terminal"

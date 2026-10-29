@@ -1,6 +1,6 @@
 //! Tray icon, tray menu and the permission popup window.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
@@ -23,6 +23,15 @@ const PROMPT_WINDOW: &str = "prompt";
 const BLINK_MS: u64 = 600;
 /// How long the green "done" ghost shows before settling back to idle.
 const DONE_SECS: u64 = 45;
+/// Check that a wanted popup is really on screen every this many blink ticks (~1.8s).
+const WATCH_EVERY: u32 = 3;
+/// Showing it again this many times in a row without luck means relaunching.
+const RELAUNCH_AFTER: u32 = 3;
+/// Never relaunch more often than this, even across relaunches.
+const RELAUNCH_GAP_MS: u64 = 10 * 60 * 1000;
+
+/// Watchdog checks in a row that found the popup wanted but off screen.
+static OFF_SCREEN: AtomicU32 = AtomicU32::new(0);
 
 static HOOKS_INSTALLED: AtomicBool = AtomicBool::new(false);
 static LAST_ERROR: Mutex<Option<String>> = Mutex::new(None);
@@ -132,14 +141,96 @@ fn refresh_now(app: &AppHandle) {
 
 pub fn show_prompt(app: &AppHandle) {
     let Some(win) = app.get_webview_window(PROMPT_WINDOW) else { return };
-    if win.is_visible().unwrap_or(false) {
-        return;
+    // Already up: don't move it, but do make sure it's really in front.
+    let appearing = !win.is_visible().unwrap_or(false);
+    if appearing {
+        placement::place(&win);
     }
-    placement::place(&win);
-    // Deliberately not focused: a stray Enter while typing must never approve anything.
-    let _ = win.show();
+    // Never key or focused: keys typed elsewhere must never reach the buttons.
     #[cfg(target_os = "macos")]
     crate::panel::order_front(&win);
+    #[cfg(not(target_os = "macos"))]
+    let _ = win.show();
+    if appearing {
+        // Restarts the click delay on the buttons.
+        let _ = app.emit_to(PROMPT_WINDOW, "popup-shown", ());
+    }
+}
+
+/// After the Mac wakes from sleep, macOS can stop putting the popup on
+/// screen even though it's shown, and only a fresh app process brings it back.
+/// When a popup is wanted but not visible: show it again, and if that keeps
+/// failing, relaunch the app. Held requests fall back to Claude Code's own
+/// prompt, and the relaunched app pops those up again from the session files.
+#[cfg(target_os = "macos")]
+fn watch_popup(app: &AppHandle) {
+    let wanted = !app.state::<AppState>().0.lock().unwrap().pending.is_empty();
+    if !wanted {
+        OFF_SCREEN.store(0, Ordering::Relaxed);
+        return;
+    }
+    // Nothing can be on screen behind the lock screen, screen saver or a sleeping display.
+    let front = focus::frontmost_bundle().unwrap_or_default();
+    if front == "com.apple.loginwindow" || front == "com.apple.ScreenSaver.Engine" || crate::panel::display_asleep() {
+        return;
+    }
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let Some(win) = handle.get_webview_window(PROMPT_WINDOW) else { return };
+        if crate::panel::is_on_screen(&win) {
+            OFF_SCREEN.store(0, Ordering::Relaxed);
+            return;
+        }
+        let misses = OFF_SCREEN.fetch_add(1, Ordering::Relaxed) + 1;
+        let relaunch = misses >= RELAUNCH_AFTER && login::is_bundled() && crate::panel::relaunch_allowed(RELAUNCH_GAP_MS);
+        crate::panel::log_recovery(&format!(
+            "popup off screen (check {misses}): {}; {}",
+            crate::panel::debug_state(&win),
+            if relaunch { "relaunching" } else { "showing it again" }
+        ));
+        if relaunch {
+            relaunch_app(&handle);
+        } else {
+            let _ = win.hide();
+            show_prompt(&handle);
+        }
+    });
+}
+
+/// Starts a fresh copy of the app once this one has quit.
+#[cfg(target_os = "macos")]
+fn relaunch_app(app: &AppHandle) {
+    // .../Claude Companion.app/Contents/MacOS/claude-companion -> .../Claude Companion.app
+    let Some(bundle) = std::env::current_exe().ok().and_then(|exe| exe.ancestors().nth(3).map(|p| p.to_path_buf())) else {
+        return;
+    };
+    // A second copy started now would exit at once (single instance), so wait for this one to go.
+    let spawned = std::process::Command::new("/bin/sh").args(["-c", "sleep 1; open \"$0\""]).arg(&bundle).spawn();
+    if spawned.is_ok() {
+        app.exit(0);
+    }
+}
+
+/// The popup window's real state, for the /sessions debug endpoint.
+pub fn popup_debug(app: &AppHandle) -> serde_json::Value {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let state = handle.get_webview_window(PROMPT_WINDOW).map(|win| {
+            #[cfg(target_os = "macos")]
+            let mut state = crate::panel::debug_state(&win);
+            #[cfg(not(target_os = "macos"))]
+            let mut state = serde_json::json!({});
+            state["tauri_visible"] = win.is_visible().unwrap_or(false).into();
+            state
+        });
+        let _ = tx.send(state);
+    });
+    let window = rx.recv_timeout(Duration::from_secs(1)).ok().flatten().unwrap_or_default();
+    serde_json::json!({
+        "window": window,
+        "off_screen_checks": OFF_SCREEN.load(Ordering::Relaxed),
+    })
 }
 
 /// Builds the tray menu; the bool says whether it differs from the last one built.
@@ -283,6 +374,10 @@ async fn animate(app: AppHandle) {
     loop {
         tokio::time::sleep(Duration::from_millis(BLINK_MS)).await;
         tick = tick.wrapping_add(1);
+        #[cfg(target_os = "macos")]
+        if tick % WATCH_EVERY == 0 {
+            watch_popup(&app);
+        }
 
         let icon = {
             let state = app.state::<AppState>();

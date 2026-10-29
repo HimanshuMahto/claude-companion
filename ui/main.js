@@ -4,6 +4,9 @@ const { getCurrentWindow, LogicalSize } = window.__TAURI__.window;
 
 const WIDTH = 420;
 const MAX_LINES = 8;
+/// Buttons ignore clicks this long after the popup appears, so a click meant
+/// for whatever was under the mouse can't land on Allow.
+const ARM_MS = 600;
 const $ = (id) => document.getElementById(id);
 
 const ICONS = {
@@ -26,6 +29,13 @@ const esc = (s) =>
 
 let pending = [];
 let shownId = null;
+let armedAt = 0;
+
+function arm() {
+  armedAt = Date.now() + ARM_MS;
+  $("card").classList.add("arming");
+  setTimeout(() => Date.now() >= armedAt && $("card").classList.remove("arming"), ARM_MS);
+}
 
 async function load() {
   pending = await invoke("get_pending");
@@ -48,6 +58,7 @@ function render() {
     card.classList.remove("enter");
     void card.offsetWidth; // restart the entrance animation
     card.classList.add("enter");
+    arm();
   }
 
   const question = req.kind === "question";
@@ -81,7 +92,11 @@ function render() {
     const b = document.createElement("button");
     b.innerHTML = `${icon(iconName)}<span>${esc(label)}</span>`;
     b.className = cls;
-    b.onclick = () => respond(req.id, action);
+    b.tabIndex = -1;
+    // detail is 0 when a key "clicked" the button; only a real click counts.
+    b.onclick = (e) => {
+      if (e.detail > 0 && Date.now() >= armedAt) respond(req.id, action);
+    };
     actions.append(b);
   };
   if (req.kind === "permission" || req.can_answer) {
@@ -246,5 +261,6 @@ $("card").addEventListener("mousedown", async (e) => {
 });
 
 listen("pending-changed", load);
+listen("popup-shown", arm);
 setInterval(tick, 1000);
 load();
