@@ -116,7 +116,7 @@ scripts/simulate.sh end
 |---|---|---|---|
 | Tray icon, status, popup | ✅ | should work (needs AppIndicator on GNOME) | should work |
 | Hook script | ✅ | ✅ | needs Git Bash `curl` (or switch to `http` hooks) |
-| Go to terminal | iTerm2 and Terminal.app focus the exact tab; VS Code, Cursor and JetBrains IDEs focus the project window; other terminals are just activated | not yet | not yet |
+| Go to terminal | iTerm2 and Terminal.app focus the exact tab; VS Code and Cursor focus the project window; JetBrains IDEs and other terminals are brought to the front | not yet | not yet |
 
 ## Layout
 

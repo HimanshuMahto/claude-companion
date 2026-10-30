@@ -123,8 +123,9 @@ pub fn focus_terminal(t: &Terminal, cwd: &str) {
         "Apple_Terminal" => focus_apple_terminal(t),
         // VS Code, Cursor, Windsurf...: reopening the folder focuses its window.
         "vscode" if !cwd.is_empty() => open_app(t, &[cwd]),
-        // JetBrains IDEs don't set TERM_PROGRAM; same trick works for them.
-        _ if t.bundle_id.starts_with("com.jetbrains.") && !cwd.is_empty() => open_app(t, &[cwd]),
+        // JetBrains IDEs open an empty extra window when handed a project that's
+        // already open (and the session's project always is), so just bring the IDE forward.
+        _ if t.bundle_id.starts_with("com.jetbrains.") => open_app(t, &[]),
         _ => false,
     };
     if !ok {
